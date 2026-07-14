@@ -1,92 +1,53 @@
 import os
 import shutil
-from datetime import datetime
 
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 
-BASE_CHROMA_PATH = "app/chroma_db"
-CURRENT_FILE = "app/current_resume.txt"
+CHROMA_DB_PATH = "app/chroma_db"
 
 embedding_model = HuggingFaceEmbeddings(
     model_name="sentence-transformers/all-MiniLM-L6-v2"
 )
 
 
-def get_current_db():
-
-    if not os.path.exists(CURRENT_FILE):
-        return None
-
-    with open(CURRENT_FILE, "r") as f:
-        return f.read().strip()
-
-
-def set_current_db(db_path):
-
-    with open(CURRENT_FILE, "w") as f:
-        f.write(db_path)
-
-
 def create_vector_store(chunks):
+    """
+    Create a new Chroma vector store.
+    Delete old database before creating a new one.
+    """
 
-    os.makedirs(BASE_CHROMA_PATH, exist_ok=True)
+    if os.path.exists(CHROMA_DB_PATH):
 
-    db_name = "resume_" + datetime.now().strftime("%Y%m%d_%H%M%S")
+        try:
+            shutil.rmtree(CHROMA_DB_PATH)
+        except Exception:
+            pass
 
-    persist_directory = os.path.join(
-        BASE_CHROMA_PATH,
-        db_name
-    )
+    os.makedirs(CHROMA_DB_PATH, exist_ok=True)
 
     vector_store = Chroma.from_documents(
         documents=chunks,
         embedding=embedding_model,
-        persist_directory=persist_directory
+        persist_directory=CHROMA_DB_PATH
     )
 
-    # Force persistence
     try:
         vector_store.persist()
     except Exception:
         pass
 
-    # Release object
-    del vector_store
+    print("\n✅ Resume indexed successfully.")
 
-    set_current_db(persist_directory)
-
-    print(f"\n✅ Active Vector DB : {persist_directory}")
-
-    return persist_directory
+    return vector_store
 
 
-def delete_old_vectorstores(keep_latest=True):
+def get_vector_store():
 
-    if not os.path.exists(BASE_CHROMA_PATH):
-        return
+    if not os.path.exists(CHROMA_DB_PATH):
+        return None
 
-    folders = sorted(os.listdir(BASE_CHROMA_PATH))
-
-    if keep_latest and len(folders) <= 1:
-        return
-
-    latest = get_current_db()
-
-    for folder in folders:
-
-        full = os.path.join(
-            BASE_CHROMA_PATH,
-            folder
-        )
-
-        if full == latest:
-            continue
-
-        try:
-
-            shutil.rmtree(full)
-
-        except Exception:
-
-            pass
+    return Chroma(
+        persist_directory=CHROMA_DB_PATH,
+        embedding_function=embedding_model
+    )

@@ -4,13 +4,9 @@ import shutil
 
 from app.services.pdf_service import extract_text_from_pdf
 from app.services.chunk_service import create_chunks
+from app.services.embedding_service import create_vector_store
 
-from app.services.embedding_service import (
-    create_vector_store,
-    delete_old_vectorstores
-)
-
-from app.utils.file_manager import clear_uploads
+from app.utils.file_manager import clear_old_data
 
 router = APIRouter()
 
@@ -23,60 +19,52 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 async def upload_resume(file: UploadFile = File(...)):
     """
     Upload Resume
-    Create NEW Vector Database
-    Make it Active
-    Delete Old Vector Databases
+    Delete Previous Resume
+    Extract Text
+    Create Chunks
+    Create Embeddings
+    Store into Chroma
     """
 
-    try:
+    # Delete previous resume and Chroma DB
+    clear_old_data()
 
-        # Delete previous uploaded PDFs only
-        clear_uploads()
+    # Save uploaded PDF
+    file_path = os.path.join(
+        UPLOAD_FOLDER,
+        file.filename
+    )
 
-        # Save uploaded resume
-        file_path = os.path.join(
-            UPLOAD_FOLDER,
-            file.filename
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(
+            file.file,
+            buffer
         )
 
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+    # Extract text
+    documents = extract_text_from_pdf(file_path)
 
-        # Extract PDF
-        documents = extract_text_from_pdf(file_path)
+    # Create chunks
+    chunks = create_chunks(documents)
 
-        # Chunk
-        chunks = create_chunks(documents)
+    # Create vector database
+    create_vector_store(chunks)
 
-        # Create NEW vector database
-        current_db = create_vector_store(chunks)
+    print("\n" + "=" * 70)
+    print("AI Resume Analyzer")
+    print("=" * 70)
+    print(f"Resume : {file.filename}")
+    print(f"Pages  : {len(documents)}")
+    print(f"Chunks : {len(chunks)}")
+    print("Old Resume Deleted Successfully")
+    print("Old Chroma Deleted Successfully")
+    print("New Resume Indexed Successfully")
+    print("=" * 70)
 
-        import gc
-
-        gc.collect()
-
-        delete_old_vectorstores()
-
-        print("\n" + "=" * 70)
-        print("AI Resume Analyzer")
-        print("=" * 70)
-        print(f"Resume       : {file.filename}")
-        print(f"Pages        : {len(documents)}")
-        print(f"Chunks       : {len(chunks)}")
-        print(f"Vector Store : {current_db}")
-        print("=" * 70)
-
-        return {
-            "status": "success",
-            "message": "Resume uploaded successfully",
-            "filename": file.filename,
-            "pages": len(documents),
-            "chunks": len(chunks)
-        }
-
-    except Exception as e:
-
-        return {
-            "status": "error",
-            "message": str(e)
-        }
+    return {
+        "status": "success",
+        "message": "Resume uploaded and indexed successfully",
+        "filename": file.filename,
+        "pages": len(documents),
+        "chunks": len(chunks)
+    }

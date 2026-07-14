@@ -8,9 +8,10 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 
 from app.prompts.skill_gap_prompt import SKILL_GAP_PROMPT
-from app.services.embedding_service import get_current_db
 
 load_dotenv()
+
+CHROMA_DB_PATH = "app/chroma_db"
 
 # -----------------------------
 # Embedding Model
@@ -35,15 +36,11 @@ def analyze_skill_gap(job_description: str):
     and return AI Skill Gap Analysis.
     """
 
-    # Get currently active vector database
-    current_db = get_current_db()
-
-    if current_db is None:
+    if not os.path.exists(CHROMA_DB_PATH):
         raise Exception("Please upload a resume first.")
 
-    # Load current resume vector store
     vector_store = Chroma(
-        persist_directory=current_db,
+        persist_directory=CHROMA_DB_PATH,
         embedding_function=embedding_model
     )
 
@@ -83,10 +80,11 @@ JSON:
     text = text.strip()
 
     try:
-        result = json.loads(text)
+        return json.loads(text)
 
     except Exception:
-        result = {
+
+        return {
             "recommended_role": "",
             "match_score": 0,
             "matched_skills": [],
@@ -94,6 +92,3 @@ JSON:
             "learning_path": [],
             "career_advice": []
         }
-    del vector_store
-    del retriever
-    return result

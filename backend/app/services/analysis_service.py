@@ -3,14 +3,15 @@ import os
 
 from dotenv import load_dotenv
 
-from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_chroma import Chroma
 from langchain_groq import ChatGroq
 
 from app.prompts.analysis_prompt import ANALYSIS_PROMPT
-from app.services.embedding_service import get_current_db
 
 load_dotenv()
+
+CHROMA_DB_PATH = "app/chroma_db"
 
 embedding_model = HuggingFaceEmbeddings(
     model_name="sentence-transformers/all-MiniLM-L6-v2"
@@ -25,9 +26,8 @@ llm = ChatGroq(
 
 def analyze_resume():
 
-    current_db = get_current_db()
+    if not os.path.exists(CHROMA_DB_PATH):
 
-    if current_db is None:
         return {
             "ats_score": 0,
             "summary": "Please upload a resume first.",
@@ -40,7 +40,7 @@ def analyze_resume():
         }
 
     vector_store = Chroma(
-        persist_directory=current_db,
+        persist_directory=CHROMA_DB_PATH,
         embedding_function=embedding_model
     )
 
@@ -53,7 +53,8 @@ def analyze_resume():
     )
 
     context = "\n\n".join(
-        doc.page_content for doc in docs
+        doc.page_content
+        for doc in docs
     )
 
     prompt = ANALYSIS_PROMPT + f"""
@@ -73,9 +74,7 @@ JSON:
     text = text.replace("```", "")
     text = text.strip()
 
-    try: 
-        del vector_store
-        del retriever
+    try:
         return json.loads(text)
 
     except Exception:

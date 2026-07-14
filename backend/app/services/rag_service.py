@@ -10,9 +10,9 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
 
-from app.services.embedding_service import get_current_db
-
 load_dotenv()
+
+CHROMA_DB_PATH = "app/chroma_db"
 
 # -----------------------------
 # API KEY
@@ -42,19 +42,21 @@ prompt = ChatPromptTemplate.from_template(
 """
 You are an expert AI Resume Analyzer.
 
-Answer ONLY from the uploaded resume.
+Answer ONLY using the information present
+inside the uploaded resume.
 
 Rules:
 
-1. Never invent information.
+1. Never make up information.
 
-2. If information is unavailable reply exactly:
+2. If the answer is not available in the resume,
+reply exactly:
 
 "I could not find that information in the uploaded resume."
 
 3. Keep answers professional.
 
-4. Use bullet points whenever possible.
+4. If possible, answer using bullet points.
 
 Resume Context:
 {context}
@@ -69,14 +71,12 @@ Answer:
 
 def ask_resume(question: str):
 
-    current_db = get_current_db()
-
-    if current_db is None:
+    if not os.path.exists(CHROMA_DB_PATH):
 
         return "Please upload a resume first."
 
     vector_store = Chroma(
-        persist_directory=current_db,
+        persist_directory=CHROMA_DB_PATH,
         embedding_function=embedding_model
     )
 
@@ -97,8 +97,5 @@ def ask_resume(question: str):
     )
 
     answer = chain.invoke(question)
-
-    del vector_store
-    del retriever
 
     return answer
